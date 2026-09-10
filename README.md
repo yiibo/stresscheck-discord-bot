@@ -102,3 +102,4 @@ requires a paid third-party API and a provider choice:
 If you want this added later, sign up with whichever provider you pick and set its API key as an
 env var (same pattern as `OWLRACLE_API_KEY`) — the integration can be built from there.
 # stresscheck-discord-bot
+# stresscheck-discord-bot
