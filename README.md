@@ -27,10 +27,11 @@ Pro plan) and social/sentiment signals (X, Reddit, etc. — evaluated but not in
 - An Anthropic API key
 - A Discord bot application + token (see setup below)
 
-Install dependencies:
+Install dependencies (in a virtualenv, so the deploy steps below can rely on one existing):
 
 ```bash
-pip install discord.py httpx anthropic apscheduler pytz
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
 ```
 
 ## Discord setup
@@ -67,10 +68,55 @@ Set these however your process/service already injects environment variables (sy
 ## Running
 
 ```bash
-python bot.py
+./venv/bin/python bot.py
 ```
 
 On startup the bot logs into Discord, schedules the daily job for 9:00 AM in `TIMEZONE`, and waits.
+
+## Deploying updates to a server
+
+The virtualenv (`venv/`) lives inside `~/discord-bot` but is git-ignored — it's machine-specific
+and never gets committed, so it just sits there and survives every `git pull` untouched.
+
+**Important:** your systemd unit's `ExecStart` must point at the venv's interpreter
+(`~/discord-bot/venv/bin/python ~/discord-bot/bot.py`), not the system `python3` — otherwise the
+service keeps running against system-wide packages no matter what you install into the venv.
+Check with `systemctl cat <your-service-name> | grep ExecStart` and update the unit file if it's
+still pointing at system Python.
+
+Once that's set up, the repeatable redeploy flow is:
+
+```bash
+cd ~/discord-bot
+git pull
+./venv/bin/pip install -r requirements.txt   # only needed when requirements.txt changed
+sudo systemctl restart <your-service-name>
+sudo systemctl status <your-service-name>   # confirm it came back up cleanly
+```
+
+(Using `./venv/bin/pip` directly avoids having to `source venv/bin/activate` first — handy for a
+copy-pasted or scripted redeploy.)
+
+If `~/discord-bot` on the server isn't a git checkout yet (e.g. it was originally deployed by
+copying `bot.py` over directly), convert it once. The venv needs to be created fresh here rather
+than moved over, since it may have been built against an older/different Python or package set:
+
+```bash
+cd ~
+mv discord-bot discord-bot.bak   # keep the old copy until you've confirmed the new one works
+git clone https://github.com/yiibo/stresscheck-discord-bot.git discord-bot
+cd discord-bot
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+sudo systemctl restart <your-service-name>   # after updating ExecStart per above, if needed
+```
+
+The `.env` file (with `DISCORD_TOKEN`, `ANTHROPIC_API_KEY`, etc.) lives outside this directory per
+the systemd unit's `EnvironmentFile=`, so re-cloning `~/discord-bot` doesn't touch it.
+
+Not sure of the service name? `systemctl list-units --type=service | grep -i disc` or check
+`/etc/systemd/system/*.service` for the unit whose `ExecStart`/`WorkingDirectory` points at
+`~/discord-bot`.
 
 ## Usage
 
